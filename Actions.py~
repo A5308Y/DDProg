@@ -1,0 +1,160 @@
+# -*- coding: utf-8 -*-
+#!/usr/bin/python
+
+import random, InputHandler, Situations, Conditions
+
+class Effect(object):
+  def __init__(self, cause, target):
+    self.cause = cause
+    self.target = target
+
+##DealDamage's cause must be the action of a class with the 'conditions' attribute
+
+class DealDamage(Effect):
+  def __init__(self, cause, target, damage):
+    Effect.__init__(self, cause, target)
+    self.damage = damage
+    
+    
+  def process(self):
+    #for i in range(self.dmg_dicecount):
+    #  damage = random.randint(1,self.dmg_dicerange)
+    #  damage += self.combatant.situational_damage_modifiers
+      if self.cause.combatant.conditions.has_key('weakened') != 0:
+	self.damage = self.damage / 2
+	self.panel.send_message('weakened attack.')
+      if self.damage <= 1:
+	self.damage = 1
+      self.target.reduce_hp(self.damage)
+
+
+class Action(object):
+  def __init__(self, name, combatant, action_type):
+    self.name = name
+    self.combatant = combatant
+    self.action_type = action_type
+    self.panel = self.combatant.combat.panel
+
+  def process(self):
+    pass
+  def __str__(self):
+    return self.name
+    
+class Power(Action):
+  def __init__(self):
+    pass
+
+
+class AttackPower(Action):
+  def __init__(self, name, combatant, action_type, power_type, power_range,
+power_target, power_attribute, power_defence, hit_description, character_class='any',
+character_level=1, *miss):
+    Action.__init__(self, name, combatant, action_type)
+    self.power_attribute = power_attribute
+    self.power_defence = power_defence
+    self.power_range = power_range
+    self.attack_modifier = self.combatant.attributes[power_attribute].get_modifier()
+    #self.attack_modifier += self.combatant.feat_modifier + self.combatant.proficiency_modifier
+    self.hit_description = hit_description
+    self.target = power_target
+    self.dmg_dicerange = self.combatant.equ_weap.dmg_dicerange
+    self.dmg_dicecount = self.combatant.equ_weap.dmg_dicecount
+
+
+  def process(self):
+    self.attack(self.choose_target())
+    
+  def choose_target(self, query=''):
+    choice_dict = self.combatant.combat.combatants
+    input_handler = self.combatant.combat.input_handler
+    choice_list = []
+    for item in choice_dict.itervalues():
+      choice_list.append(item)
+    if query == '':
+      query = 'Which target for ' + self.name + ' ? (Range:' + str(self.power_range) + ')'
+    return input_handler.graphic_list_choice(choice_list, query)
+    
+  def attack(self, actual_target):
+    if type(actual_target) != InputHandler.Cancel:
+      target_defense = actual_target.defenses[self.power_defence].value
+      target_defense += actual_target.situational_defense_modifiers
+      self.attack_modifier += self.combatant.situational_attack_modifiers
+      roll = random.randint(1,20)
+      roll_msg = '1D20 (' + str(roll) + ') + ' + str(self.attack_modifier) + ' >= ' + str(target_defense)
+      if  roll + self.attack_modifier >= target_defense:
+	hit_msg = self.combatant.name  + ' hits ' + actual_target.name + ' (' + self.name + ')'
+	self.hit(actual_target)
+      else:
+	hit_msg = 'miss.'
+	actual_target.is_missed()
+      self.panel.send_message([roll_msg, hit_msg])
+      
+      ##Calculate the weapon damage of the weapon
+  def weapon_damage(self):
+    damage = 0
+    for i in range(self.dmg_dicecount):
+      damage += random.randint(1,self.dmg_dicerange)
+    self.panel.send_message(str(self.dmg_dicecount) + 'D' + str(self.dmg_dicerange) + ' + ' + str(self.combatant.attributes[self.power_attribute].get_modifier()))
+    damage += self.combatant.attributes[self.power_attribute].get_modifier()
+    damage += self.combatant.situational_damage_modifiers
+    return damage
+
+  def hit(self, actual_target):
+    DealDamage(self,actual_target, self.weapon_damage()).process()
+
+
+class Basic_Melee(AttackPower):
+  def __init__(self, combatant):
+    AttackPower.__init__(self, 'Basic Melee Attack', combatant, 'Standard Action', 'melee',
+0, 'one creature', 'str', 'AC', '1W + str')
+
+
+class Cleave(AttackPower):
+  def __init__(self,combatant):
+    AttackPower.__init__(self, 'Cleave', combatant, 'Standard Action', 'melee',
+0, 'one creature', 'str', 'AC', '1W + str')
+  def hit(self, actual_target):
+    DealDamage(self,actual_target,self.weapon_damage()).process()
+    secondary_damage = self.combatant.attributes['str'].get_modifier()
+    string = 'Cleave Effect: ' + str(secondary_damage) + ' damage against adjacent enemy'
+    target = self.choose_target(string)
+    if type(target) is not InputHandler.Cancel:
+      DealDamage(self,actual_target,self.combatant.attributes['str'].get_modifier()).process()
+      
+class SureStrike(AttackPower):
+  def __init__(self,combatant):
+    AttackPower.__init__(self, 'Sure Strike', combatant, 'Standard Action', 'melee',
+0, 'one creature', 'str', 'AC', '1W + str')
+  self.attack_modifier += 2
+
+
+class Walk(Action):
+  def __init__(self, combatant):
+    Action.__init__(self, 'Walk', combatant, 'Move Action')
+    
+  def process(self):
+    self.panel.send_message('move ' + str(self.combatant.speed) + ' squares')
+
+class Run(Action):
+  def __init__(self, combatant):
+    Action.__init__(self, 'Run', combatant, 'Move Action')
+
+  def process(self):
+    Situations.Running(self.combatant).add_situation()
+    self.panel.send_message('move ' + str(self.combatant.speed + 2) + ' squares')
+    
+class Shift(Action):
+  def __init__(self, combatant):
+    Action.__init__(self, 'Shift', combatant, 'Move Action')
+    
+  def process(self):
+    self.panel.send_message('shift 1 square')
+  
+
+class Mark(Action):
+  def __init__(self, combatant):
+    Action.__init__(self, 'Mark', combatant, 'Move Action')
+    
+  def process(self):
+    Situations.Marking(self.combatant).add_situation()
+    Situations.Marked(self.choose_target()).add_situation()

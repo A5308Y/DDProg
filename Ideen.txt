@@ -1,0 +1,13 @@
+Effects
+mehr powers
+mehr gegenstände
+action points
+erfahrungspunkte
+skills
+levelaufstieg
+feats
+
+
+Effect mit target wenn keins angegeben choose-target aufrufen. Action als unterklasse von effect.
+
+Process combat round neu

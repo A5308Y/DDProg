@@ -1,0 +1,8 @@
+# -*- coding: utf-8 -*-
+#!/usr/bin/python
+
+import Actions, Characters
+
+Characters.Character('Kandorn').process_combatant()
+
+
